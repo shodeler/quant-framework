@@ -3,6 +3,8 @@
 Needs RQ credentials in .env for the sync step only:
 
     python scripts/benchmark_fixtures.py --check
+    python scripts/benchmark_fixtures.py download     # F1 + sync: needs network and RQ
+    python scripts/benchmark_fixtures.py prepare      # F2 + F3: local only
     python scripts/benchmark_fixtures.py F1 sync F2 F3 [--reset]
 
 F1    project bench-momentum from sdk-v1-default with the momentum_20d factor,
@@ -34,6 +36,7 @@ PROJECTS = {
     "F3": ("bench-quality", "Benchmark quality", "quality_profitability"),
 }
 TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
+STAGES = {"download": ["F1", "sync"], "prepare": ["F2", "F3"]}
 
 
 def _client(origin: str) -> httpx.Client:
@@ -119,7 +122,7 @@ def run_backtest(client: httpx.Client) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("fixtures", nargs="*", choices=["F1", "sync", "F2", "F3"])
+    parser.add_argument("fixtures", nargs="*", choices=["F1", "sync", "F2", "F3", *STAGES])
     parser.add_argument("--origin", default="http://127.0.0.1:8000")
     parser.add_argument("--check", action="store_true", help="only report data coverage and existing projects")
     parser.add_argument("--reset", action="store_true", help="delete and recreate benchmark projects")
@@ -128,7 +131,7 @@ def main() -> int:
         context = check(client)
         if args.check:
             return 0
-        for fixture in args.fixtures:
+        for fixture in [step for name in args.fixtures for step in STAGES.get(name, [name])]:
             if fixture in PROJECTS:
                 create_project(client, fixture, args.reset)
             elif fixture == "sync":
