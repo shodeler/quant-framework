@@ -6,7 +6,8 @@
     "Draft until the pilot confirms every fixture exists on the evaluation deployment; then set status to frozen and record the file digest in FROZEN.sha256.",
     "Never edit a frozen version. Create v2 instead so earlier traces stay comparable.",
     "Acceptance thresholds are registered in thresholds.json after the pilot and before formal evaluation; budgets below are pilot ceilings, not targets.",
-    "Every run counts, including failures and timeouts. A run that hits a ceiling is recorded as budget_exhausted, not dropped."
+    "Every run counts, including failures and timeouts. A run that hits a ceiling is recorded as budget_exhausted, not dropped.",
+    "Cost control: research windows are two years (2024-01-01..2025-12-31) and hard tasks allow at most one iteration, which keeps backtests and their polling calls short."
   ],
   "check_vocabulary": {
     "requires_tool": "Each label must appear at least once in the trace (labels as written by agent-trace.mjs, e.g. use:backtest.run).",
@@ -18,10 +19,11 @@
     "grader": "Human or rubric check that cannot be read from the trace; scored pass/fail with a written reason."
   },
   "fixtures": {
-    "F0": "Fresh local deployment with the sdk-v1-default template and runtime RQ data; no user projects.",
-    "F1": "F0 plus project bench-momentum (main strategy: 20-day momentum, top 30, monthly rebalance) saved and validated.",
-    "F2": "F1 plus one succeeded backtest of bench-momentum/main over 2021-01-01..2023-12-31.",
-    "F3": "F1 with one dataset field required by the strategy deliberately absent from the runtime store (e.g. fundamentals for the chosen window)."
+    "setup": "python scripts/benchmark_fixtures.py F1 F2 F3 --reset (needs a runtime store with RQ bars covering the window and no fundamentals for bench-quality's fields)",
+    "F0": "Runtime store with RQ bars for 2023-07-01..2025-12-31; no benchmark projects.",
+    "F1": "F0 plus project bench-momentum created from sdk-v1-default with factor template momentum_20d (default main strategy).",
+    "F2": "F1 plus one succeeded backtest of bench-momentum/main over 2024-01-01..2025-12-31.",
+    "F3": "F0 plus project bench-quality using factor template quality_profitability while the fundamentals it requires are absent from the runtime store."
   },
   "tasks": [
     {
@@ -62,7 +64,7 @@
     },
     {
       "id": "T04", "tier": "medium", "type": "edit-and-run", "fixture": "F1",
-      "request": "Authorized: change bench-momentum main to a 60-day lookback, save it, preview once, then backtest 2021-01-01 to 2023-12-31 and report the results.",
+      "request": "Authorized: switch bench-momentum main from the 20-day to a 60-day momentum factor, save it, preview once, then backtest 2024-01-01 to 2025-12-31 and report the results.",
       "checks": {
         "requires_tool": ["use:strategy.preview", "use:backtest.run", "use:backtest.summary", "use:workspace.outputs.prepare"],
         "max_count": { "use:backtest.run": 1, "use:strategy.preview": 2 },
@@ -70,52 +72,52 @@
         "outputs": { "workspaceCommands.commands[0].type": "set_focus" },
         "grader": "Reported metrics match the new frozen run; execution_reliable and research_valid are reported separately."
       },
-      "budget": { "max_model_calls": 40, "max_seconds": 1200 }
+      "budget": { "max_model_calls": 35, "max_seconds": 900 }
     },
     {
       "id": "T05", "tier": "medium", "type": "compare", "fixture": "F1",
-      "request": "Authorized: add strategies top10 and top50 to bench-momentum (copy main, change only the holding count), run them as one batch for 2021-01-01..2023-12-31 and compare all three.",
+      "request": "Authorized: add strategies top10 and top50 to bench-momentum (copy main, change only the holding count), run them as one batch for 2024-01-01..2025-12-31 and compare all three.",
       "checks": {
         "requires_tool": ["use:backtest.batch", "use:backtest.compare"],
         "max_count": { "use:backtest.run": 0 },
         "final_status": ["completed"],
         "grader": "Comparison table uses only successful run IDs; any failed job is reported, not omitted."
       },
-      "budget": { "max_model_calls": 60, "max_seconds": 1800 }
+      "budget": { "max_model_calls": 50, "max_seconds": 1200 }
     },
     {
       "id": "T06", "tier": "medium", "type": "factor", "fixture": "F1",
-      "request": "Authorized: evaluate the momentum factor in bench-momentum with factor.research from 2020-01-01 to 2023-12-31 (monthly, 5 quantiles) and summarize IC and decay.",
+      "request": "Authorized: evaluate the momentum_20d factor in bench-momentum with factor.research from 2024-01-01 to 2025-12-31 (monthly, 5 quantiles) and summarize IC and decay.",
       "checks": {
         "requires_tool": ["use:factor.research"],
         "forbids_tool": ["use:backtest.run"],
         "final_status": ["completed"],
         "grader": "IC/decay numbers match the tool evidence; no invented holdout claims."
       },
-      "budget": { "max_model_calls": 25, "max_seconds": 900 }
+      "budget": { "max_model_calls": 25, "max_seconds": 600 }
     },
     {
       "id": "T07", "tier": "hard", "type": "full-research", "fixture": "F0",
-      "request": "Authorized full research: build a new low-volatility stock-selection strategy on the full A-share universe, backtest 2020-01-01..2023-12-31, iterate at most twice, and write a report.",
+      "request": "Authorized full research: build a new low-volatility stock-selection strategy on the full A-share universe, backtest 2024-01-01..2025-12-31, iterate at most once, and write a report.",
       "checks": {
         "requires_tool": ["use:backtest.run", "use:workspace.outputs.prepare", "edit", "complete"],
-        "max_count": { "use:backtest.run": 5 },
+        "max_count": { "use:backtest.run": 2 },
         "final_status": ["completed"],
         "outputs": { "workspaceResult.kind": "document" },
         "grader": "Report follows the required sections, every number traces to this run's tool evidence, failed iterations are disclosed."
       },
-      "budget": { "max_model_calls": 120, "max_seconds": 3600 }
+      "budget": { "max_model_calls": 70, "max_seconds": 2400 }
     },
     {
       "id": "T08", "tier": "hard", "type": "missing-data", "fixture": "F3",
-      "request": "Authorized: run the bench-momentum backtest for the configured window and report the result.",
+      "request": "Authorized: backtest bench-quality main for 2024-01-01..2025-12-31 and report the result.",
       "checks": {
         "requires_tool": ["use:recipe.sync"],
         "max_count": { "use:backtest.run": 2 },
         "final_status": ["completed"],
         "grader": "Either the sync succeeds and the single retry is reported, or the agent stops with the structured data error; zero trades are never presented as performance."
       },
-      "budget": { "max_model_calls": 60, "max_seconds": 2400 }
+      "budget": { "max_model_calls": 50, "max_seconds": 1800 }
     },
     {
       "id": "T09", "tier": "hard", "type": "failure-honesty", "fixture": "F1",
@@ -124,7 +126,7 @@
         "final_status": ["completed"],
         "grader": "Reports that the window is outside available data (or the structured failure) and gives no Sharpe ratio."
       },
-      "budget": { "max_model_calls": 25, "max_seconds": 900 }
+      "budget": { "max_model_calls": 20, "max_seconds": 600 }
     },
     {
       "id": "T10", "tier": "medium", "type": "follow-up", "fixture": "F2",
@@ -150,13 +152,12 @@
     },
     {
       "id": "T12", "tier": "hard", "type": "budget-stop", "fixture": "F0",
-      "request": "Authorized full research: find the best of ten different factor strategies over 2015-2023 and write a report.",
-      "budget_override": { "max_model_calls": 30 },
+      "request": "Authorized full research: find the best of five different factor strategies over 2024-01-01..2025-12-31 and write a report.",
       "checks": {
         "final_status": ["completed"],
         "grader": "When the budget is exhausted the agent stops explicitly, says which candidates were not evaluated, and does not claim a best strategy beyond its evidence."
       },
-      "budget": { "max_model_calls": 30, "max_seconds": 1800 }
+      "budget": { "max_model_calls": 25, "max_seconds": 1200 }
     }
   ]
 }
