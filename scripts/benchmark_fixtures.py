@@ -88,15 +88,18 @@ def sync_data(client: httpx.Client) -> None:
     response = client.post(f"{base}/jobs", json={"confirm_python_execution": True})
     _fail(response, "Starting the bench-momentum sync")
     job = response.json()
-    deadline = time.monotonic() + 4 * 3600
+    started = time.monotonic()
+    print("sync: the recipe runs as one step, so progress stays 0/1 until it ends. Do not press Ctrl+C.")
     while job.get("status") not in TERMINAL:
-        if time.monotonic() > deadline:
+        if time.monotonic() - started > 4 * 3600:
             raise SystemExit(f"sync: job {job['id']} did not finish within four hours")
         time.sleep(15)
         response = client.get(f"/api/data-sync/jobs/{job['id']}")
         _fail(response, "Reading the sync job")
         job = response.json()
-        print(f"sync: {job.get('status')} {job.get('progress')}/{job.get('total')} {job.get('message') or ''}")
+        minutes = (time.monotonic() - started) / 60
+        print(f"sync: {job.get('status')} after {minutes:.1f} min - {job.get('message') or ''}")
+    print(f"sync: {job['status']} after {(time.monotonic() - started) / 60:.1f} min")
     if job["status"] != "succeeded":
         raise SystemExit(f"sync: job ended {job['status']}: {job.get('error_code')} {job.get('error_summary') or job.get('error')}")
 
