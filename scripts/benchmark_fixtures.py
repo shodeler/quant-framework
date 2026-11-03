@@ -31,6 +31,7 @@ import argparse
 import json
 import sys
 import time
+from pathlib import Path
 
 import httpx
 
@@ -58,6 +59,8 @@ def monthly_momentum(context, state, *, top_n: int = 10):
     return SignalResult(selected=selected, scores=scores, state=state)'''
 REPLACEMENTS = {"F3": [{"entrypoint_id": "monthly_momentum", "function_source": QUALITY_SIGNAL}]}
 TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
+# Local ids of fixture results, read by scripts/agent_benchmark.py.
+FIXTURE_STATE = Path(__file__).resolve().parents[1] / "build/benchmarks/fixtures.json"
 STAGES = {"download": ["F1", "sync"], "prepare": ["F2", "F3"]}
 
 
@@ -144,6 +147,8 @@ def run_backtest(client: httpx.Client) -> None:
     if job["status"] != "succeeded":
         raise SystemExit(f"F2: backtest ended {job['status']}: {job.get('error_code')} {job.get('error_summary')}")
     print(f"F2: backtest {job.get('result_id')} succeeded, execution_reliable={job.get('execution_reliable')}")
+    FIXTURE_STATE.parent.mkdir(parents=True, exist_ok=True)
+    FIXTURE_STATE.write_text(json.dumps({"F2_BACKTEST": job.get("result_id")}) + "\n", encoding="utf-8")
 
 
 def main() -> int:

@@ -7,7 +7,8 @@
     "Never edit a frozen version. Create v2 instead so earlier traces stay comparable.",
     "Acceptance thresholds are registered in thresholds.json after the pilot and before formal evaluation; budgets below are pilot ceilings, not targets.",
     "Every run counts, including failures and timeouts. A run that hits a ceiling is recorded as budget_exhausted, not dropped.",
-    "Cost control: research windows are two years (2024-01-01..2025-12-31) and hard tasks allow at most one iteration, which keeps backtests and their polling calls short."
+    "Cost control: research windows are two years (2024-01-01..2025-12-31) and hard tasks allow at most one iteration, which keeps backtests and their polling calls short.",
+    "{F2_BACKTEST} in a request is replaced by the runner with the local F2 backtest id from build/benchmarks/fixtures.json, because later tasks create newer bench-momentum backtests."
   ],
   "check_vocabulary": {
     "requires_tool": "Each label must appear at least once in the trace (labels as written by agent-trace.mjs, e.g. use:backtest.run).",
@@ -64,7 +65,7 @@
       "tier": "easy",
       "type": "read-only",
       "fixture": "F2",
-      "request": "What were the Sharpe ratio, max drawdown and trade count of the latest bench-momentum backtest? Do not run anything new.",
+      "request": "What were the Sharpe ratio, max drawdown and trade count of bench-momentum backtest {F2_BACKTEST}? Do not run anything new.",
       "checks": {
         "requires_tool": [
           "use:backtest.summary"
@@ -202,7 +203,7 @@
           "complete"
         ],
         "max_count": {
-          "use:backtest.run": 2
+          "use:backtest.run": 3
         },
         "final_status": [
           "completed"
@@ -210,7 +211,8 @@
         "outputs": {
           "workspaceResult.kind": "document"
         },
-        "grader": "Report follows the required sections, every number traces to this run's tool evidence, failed iterations are disclosed."
+        "grader": "Report follows the required sections, every number traces to this run's tool evidence, failed iterations are disclosed.",
+        "note": "Three runs allow one rerun after a crashed run; a crash plus fix is not an extra iteration."
       },
       "budget": {
         "max_model_calls": 70,
@@ -267,11 +269,11 @@
       "conversation": [
         {
           "role": "user",
-          "content": "What was the max drawdown of the latest bench-momentum backtest?"
+          "content": "What was the max drawdown of bench-momentum backtest {F2_BACKTEST}?"
         },
         {
           "role": "assistant",
-          "content": "I read the latest bench-momentum backtest summary and reported its maximum drawdown."
+          "content": "I read the summary of backtest {F2_BACKTEST} and reported its maximum drawdown."
         }
       ],
       "request": "And how does that compare with its annual return?",

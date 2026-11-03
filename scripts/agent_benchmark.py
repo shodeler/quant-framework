@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import benchmark_fixtures as fixtures  # noqa: E402
 
 TASKS = ROOT / "benchmarks/agent/v1/tasks.json"
+FIXTURE_STATE = fixtures.FIXTURE_STATE
 TERMINAL = {"completed", "blocked", "failed", "cancelled"}
 # Base projects survive between tasks; anything else the Agent created is removed.
 BASE_PROJECTS = {"sdk-v1-default", "bench-momentum", "bench-quality"}
@@ -90,16 +91,26 @@ def reset_fixtures(client: httpx.Client, task: dict) -> None:
                 print(f"  reset: removed {relative} so fundamentals are missing again")
 
 
+def _fill(text: str) -> str:
+    """Name fixture results by id; "the latest backtest" changes as tasks run."""
+
+    if "{F2_BACKTEST}" not in text:
+        return text
+    if not FIXTURE_STATE.exists():
+        raise SystemExit("Run scripts/benchmark_fixtures.py F2 first; it records the F2 backtest id.")
+    return text.replace("{F2_BACKTEST}", json.loads(FIXTURE_STATE.read_text(encoding="utf-8"))["F2_BACKTEST"])
+
+
 def run_input(task: dict, request_id: str) -> dict:
     project = "bench-quality" if task["fixture"] == "F3" else "bench-momentum"
-    history = [{"role": item["role"], "content": item["content"]} for item in task.get("conversation", [])]
+    history = [{"role": item["role"], "content": _fill(item["content"])} for item in task.get("conversation", [])]
     context = {
         "requestId": request_id, "source": "benchmark", "activeMode": "project",
         "selectedProjectId": project, "selectedStrategyId": "main",
         "workspaceCapabilities": WORKSPACE_CAPABILITIES, "lastWorkspaceCommandReceipts": [],
         "conversationHistory": {"version": 1, "storage": "server-shared", "messages": history},
     }
-    return {"request": json.dumps({"version": 1, "userRequest": task["request"], "workspaceContext": context},
+    return {"request": json.dumps({"version": 1, "userRequest": _fill(task["request"]), "workspaceContext": context},
                                   ensure_ascii=False)}
 
 
@@ -144,6 +155,9 @@ def run_task(client: httpx.Client, exposure_id: str, task: dict, repetition: int
         elapsed = time.monotonic() - started
         if run["status"] in TERMINAL:
             break
+        if outcome is not None:
+            # Cancellation lands after the current model or tool call returns.
+            continue
         if model_calls > budget["max_model_calls"] or elapsed > budget["max_seconds"]:
             outcome = "budget_exhausted"
             print(f"  budget exhausted after {elapsed:.0f}s and {model_calls} model calls; cancelling")

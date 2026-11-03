@@ -100,6 +100,40 @@ def test_budget_exhaustion_cancels_and_is_recorded_not_dropped(tmp_path, monkeyp
     assert result["auto_pass"] is False
 
 
+def test_budget_cancel_is_sent_once_while_the_run_winds_down(tmp_path, monkeypatch):
+    monkeypatch.setattr(bench.time, "sleep", lambda _seconds: None)
+    cancels = []
+    polls = {"count": 0}
+    rows = [{"type": "model", "tokens_in": 1}] * 5
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/conexus/runs" and request.method == "POST":
+            (tmp_path / "r.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+            return httpx.Response(202, json={"run": {"id": "r", "status": "queued"}, "accessToken": "t"})
+        if request.url.path.endswith("/cancel"):
+            cancels.append(1)
+            return httpx.Response(200, json={"run": {"id": "r", "status": "running"}})
+        polls["count"] += 1
+        status = "cancelled" if polls["count"] > 5 else "running"
+        return httpx.Response(200, json={"run": {"id": "r", "status": status}})
+
+    client = httpx.Client(base_url="http://bench.test", transport=httpx.MockTransport(handler))
+    result = bench.run_task(client, "exposure", TASK, 1, tmp_path, "test")
+    assert len(cancels) == 1
+    assert result["outcome"] == "budget_exhausted"
+
+
+def test_fixture_ids_are_filled_into_requests(tmp_path, monkeypatch):
+    state = tmp_path / "fixtures.json"
+    state.write_text(json.dumps({"F2_BACKTEST": "abc123"}), encoding="utf-8")
+    monkeypatch.setattr(bench, "FIXTURE_STATE", state)
+    task = {**TASK, "request": "Read backtest {F2_BACKTEST}.",
+            "conversation": [{"role": "user", "content": "Earlier: {F2_BACKTEST}"}]}
+    context = json.loads(bench.run_input(task, "req")["request"])
+    assert context["userRequest"] == "Read backtest abc123."
+    assert context["workspaceContext"]["conversationHistory"]["messages"][0]["content"] == "Earlier: abc123"
+
+
 def test_checks_catch_forbidden_confirmations_and_counts():
     rows = [
         {"type": "tool", "label": "use:backtest.run", "confirms": ["confirm_python_execution"]},
