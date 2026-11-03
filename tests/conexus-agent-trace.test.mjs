@@ -112,6 +112,14 @@ test('tool events record duration, repeats and failures; model errors are record
     ])
     assert.deepEqual(tools[0].confirms, ['confirm_python_execution'])
     assert.equal(tools[1].error_code, 'ALPHALAB_API_UNAVAILABLE')
+    // A successful read that merely lists failed jobs is not a failed tool call.
+    complete.trace({ type: 'tool.started', requestId: 'req-2', toolCallId: 't3', toolName: 'use',
+      arguments: { input: { command: 'workspace.context' } } })
+    await complete.trace({ type: 'tool.completed', requestId: 'req-2', toolCallId: 't3', toolName: 'use',
+      result: JSON.stringify({ success: true, output: { status: 'ready', tasks: { sync: [{ status: 'failed', error_code: 'DATA_SYNC_FAILED' }] } } }) })
+    const listed = (await readRows(dir, 'req-2')).find(row => row.label === 'use:workspace.context')
+    assert.equal(listed.ok, true)
+    assert.equal(listed.error_code, null)
     const model = rows.find(row => row.type === 'model')
     assert.equal(model.ok, false)
     assert.equal(model.error_code, 'model_provider_error')

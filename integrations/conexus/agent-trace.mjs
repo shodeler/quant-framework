@@ -29,8 +29,22 @@ export function toolLabel(name, args) {
   return name
 }
 
-const failedResult = result => /"status":"failed"|"success":false/.test(text(result))
-const errorCode = result => text(result).match(/"error_code":"([A-Z0-9_]+)"/)?.[1] ?? null
+// Tool results are {success, output}; AlphaLab tools report failure as output.status.
+// Only these top-level fields count: a successful read may list failed jobs.
+const parsed = result => {
+  if (typeof result !== 'string') return result
+  try { return JSON.parse(result) } catch { return null }
+}
+const failedResult = result => {
+  const value = parsed(result)
+  if (!value || typeof value !== 'object') return false
+  return value.success === false || (value.output ?? value)?.status === 'failed'
+}
+const errorCode = result => {
+  const value = parsed(result)
+  const output = value?.output ?? value
+  return typeof output?.error_code === 'string' ? output.error_code : null
+}
 
 /** Top-level confirmation flags are the permission evidence a benchmark checks. */
 export function confirmations(args) {
