@@ -9,11 +9,17 @@ Needs RQ credentials in .env for the sync step only:
 
 F1    project bench-momentum from sdk-v1-default with the momentum_20d factor,
       its recipe limited to the benchmark data range.
-sync  run bench-momentum's saved recipe (bars only) and wait for it to finish.
+sync  run bench-momentum's saved recipe and wait for it to finish. This is the
+      full default A-share recipe: instruments, bars, suspension and ST state,
+      daily factors, then index components, financials and factor returns.
+      Each run stops after the recipe's 30-minute limit and resumes from its
+      watermarks on the next run.
 F2    one succeeded backtest of bench-momentum/main over the benchmark window.
-F3    project bench-quality using quality_profitability. Its fundamentals stay
-      absent because only bench-momentum's bars recipe is synchronized, so the
-      Agent has to sync them itself.
+F3    project bench-quality using quality_profitability. It needs financials to
+      be ABSENT, so stop rerunning "sync" once bars, suspension and ST state
+      cover the window; T08 then makes the Agent sync the financials itself.
+      Delete data/runtime/rq/financials and data/runtime/canonical/fundamentals
+      before every T08 repetition to restore this state.
 
 The fixtures use the same endpoints the Agent tools call, so a fixture that
 cannot be created here would also fail for the Agent.

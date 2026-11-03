@@ -23,7 +23,7 @@
     "F0": "Runtime store with RQ bars for 2023-07-01..2025-12-31; no benchmark projects.",
     "F1": "F0 plus project bench-momentum created from sdk-v1-default with factor template momentum_20d (default main strategy).",
     "F2": "F1 plus one succeeded backtest of bench-momentum/main over 2024-01-01..2025-12-31.",
-    "F3": "F0 plus project bench-quality using factor template quality_profitability while the fundamentals it requires are absent from the runtime store."
+    "F3": "F0 plus project bench-quality using factor template quality_profitability while the fundamentals it requires are absent from the runtime store. The default recipe also syncs financials, so stop syncing once bars, paused and is_st cover the window, and delete data/runtime/rq/financials and data/runtime/canonical/fundamentals before every T08 repetition."
   },
   "tasks": [
     {
