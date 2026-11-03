@@ -41,6 +41,22 @@ PROJECTS = {
     "F1": ("bench-momentum", "Benchmark momentum", "momentum_20d"),
     "F3": ("bench-quality", "Benchmark quality", "quality_profitability"),
 }
+# The template signal ranks by momentum_20d; F3 must rank by the quality factor so
+# its backtest genuinely depends on the missing fundamentals.
+QUALITY_SIGNAL = '''@signal(
+    id="monthly_momentum",
+    label="月末质量 Top N",
+    schedule=Monthly.last_trading_day(at="close"),
+)
+def monthly_momentum(context, state, *, top_n: int = 10):
+    """在每月最后一个交易日收盘后，选择质量得分最高的 top_n 个标的。"""
+    scores = context.combine_factors(
+        weights={"quality_profitability": 1.0},
+        normalization="raw",
+    ).dropna()
+    selected = list(scores.nlargest(top_n).index)
+    return SignalResult(selected=selected, scores=scores, state=state)'''
+REPLACEMENTS = {"F3": [{"entrypoint_id": "monthly_momentum", "function_source": QUALITY_SIGNAL}]}
 TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 STAGES = {"download": ["F1", "sync"], "prepare": ["F2", "F3"]}
 
@@ -75,6 +91,7 @@ def create_project(client: httpx.Client, fixture: str, reset: bool) -> None:
     response = client.post("/api/strategy/projects", json={
         "project_id": project_id, "name": name, "description": f"Agent benchmark fixture {fixture} (issue #22)",
         "factors": [{"template_id": template_id}],
+        "function_replacements": REPLACEMENTS.get(fixture, []),
         "recipe_parameters": {"start": DATA_RANGE[0], "end": DATA_RANGE[1]},
         "confirm_save": True, "confirm_python_execution": True,
     })
