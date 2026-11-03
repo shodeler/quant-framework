@@ -25,11 +25,14 @@ const seconds = ms => Math.round(ms) / 1000
 
 export function summarizeRun(rows) {
   const meta = rows.find(row => row.type === 'run.meta') ?? {}
+  // scripts/agent_benchmark.py labels each trace after the run finishes.
+  const tag = rows.find(row => row.type === 'benchmark.task') ?? {}
   const times = rows.map(row => Date.parse(row.at)).filter(Number.isFinite)
   const wallMs = times.length ? Math.max(...times) - Math.min(...times) : 0
   const end = rows.filter(row => row.type?.startsWith('request.') && row.type !== 'request.started').at(-1)
   const run = {
-    requestId: meta.requestId, task_id: meta.task_id ?? null, benchmark: meta.benchmark ?? null, git_commit: meta.git_commit ?? null,
+    requestId: meta.requestId, task_id: tag.task_id ?? meta.task_id ?? null, repetition: tag.repetition ?? null,
+    benchmark: meta.benchmark ?? null, git_commit: meta.git_commit ?? null,
     prompt_digest: meta.prompt_digest ?? null, model: null, status: end ? end.type.slice('request.'.length) : 'unfinished',
     wall_s: 0, model_s: 0, other_s: 0, tool_s: { discovery: 0, wait: 0, output: 0, human: 0, research: 0 },
     model_calls: 0, model_failures: 0, tool_calls: 0, tool_failures: 0, repeated_tool_calls: 0, human_requests: 0,

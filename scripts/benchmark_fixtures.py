@@ -154,7 +154,7 @@ def main() -> int:
     parser.add_argument("--reset", action="store_true", help="delete and recreate benchmark projects")
     args = parser.parse_args()
     with _client(args.origin) as client:
-        context = check(client)
+        check(client)
         if args.check:
             return 0
         for fixture in [step for name in args.fixtures for step in STAGES.get(name, [name])]:

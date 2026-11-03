@@ -22,6 +22,23 @@ size and growth, requested tools) and per tool call (time, AlphaLab command,
 confirmation flags, failure code, repeat flag, result size). Prompt text, tool
 payloads and keys are never written.
 
+## Run tasks
+
+Create the fixtures once with `scripts/benchmark_fixtures.py`, start
+`alphalab dev serve` with the trace variables above, then in a second terminal:
+
+```powershell
+python scripts\agent_benchmark.py --tasks T01 --label pilot     # one task
+python scripts\agent_benchmark.py --label pilot                  # all tasks once
+python scripts\agent_benchmark.py --label baseline --repeat 3
+```
+
+The runner restores fixtures before every task, enforces each task's
+model-call and time budget by cancelling the run (recorded as
+`budget_exhausted`), answers Agent questions with a fixed "no further input"
+reply and counts them as human effort, and writes automatic check results to
+`build/benchmarks/<label>/results.jsonl`. Grader and output checks remain manual.
+
 ## Read the results
 
 ```powershell
