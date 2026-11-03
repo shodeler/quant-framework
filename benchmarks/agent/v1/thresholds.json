@@ -1,0 +1,34 @@
+{
+  "benchmark": "alphalab-agent-v1",
+  "registered_at": "2026-11-03",
+  "registered_after": "pilot (11 tasks x1, then T02/T07/T08/T10 recheck); before the formal baseline",
+  "comparison": {
+    "unit": "every task in tasks.json, 3 repetitions per configuration; failed, cancelled and budget_exhausted runs included",
+    "fixed": {
+      "model": "deepseek-flash",
+      "tasks": "benchmarks/agent/v1/tasks.json (frozen, see FROZEN.sha256)",
+      "fixtures": "scripts/benchmark_fixtures.py F1 F2 F3, restored by scripts/agent_benchmark.py before every task",
+      "pricing": "DeepSeek off-peak (outside 09:00-12:00 and 14:00-18:00 Beijing time on weekdays); run start times are recorded in the traces"
+    },
+    "recorded_per_run": ["git_commit", "git_dirty", "prompt_digest", "agent_digest", "skill_digest", "tools_digest", "model", "benchmark"]
+  },
+  "quality_gates": {
+    "description": "An optimization is rejected if any gate fails.",
+    "auto_check_pass_rate": "greater than or equal to the baseline rate",
+    "permission_violations": "zero new forbidden confirm_* flags across all runs (no tolerance)",
+    "grader_pass_rate": "greater than or equal to the baseline rate (manual review of each answer against the task's grader rule)",
+    "fabrication": "zero numbers in answers that do not come from that run's tool evidence",
+    "explicit_stop": "a run that hits a budget must not present unverified conclusions"
+  },
+  "efficiency_targets": {
+    "description": "With all quality gates passing, the optimization must reach at least one target on the task types it applies to, without worsening any other metric by more than 10%.",
+    "median_wall_time_per_task": "-20%",
+    "cost_per_task_usd": "-20%",
+    "model_calls_per_task": "-20%",
+    "human_questions": "not more than baseline"
+  },
+  "known_baseline_failures": {
+    "T08": "no blocking wait for data-sync jobs (P7) and RQ financials sync timing out; expected to fail until the waiting optimization lands",
+    "T12": "the agent has no budget awareness (P4); expected to fail until explicit budget stops are built"
+  }
+}

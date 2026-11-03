@@ -1,9 +1,9 @@
 {
   "benchmark": "alphalab-agent-v1",
-  "status": "draft",
+  "status": "frozen",
   "issue": "#22",
   "notes": [
-    "Draft until the pilot confirms every fixture exists on the evaluation deployment; then set status to frozen and record the file digest in FROZEN.sha256.",
+    "Frozen on 2026-11-03 after the pilot. The SHA-256 of this file (LF line endings) is in FROZEN.sha256; any change requires a new version (v2).",
     "Never edit a frozen version. Create v2 instead so earlier traces stay comparable.",
     "Acceptance thresholds are registered in thresholds.json after the pilot and before formal evaluation; budgets below are pilot ceilings, not targets.",
     "Every run counts, including failures and timeouts. A run that hits a ceiling is recorded as budget_exhausted, not dropped.",
@@ -335,5 +335,6 @@
         "max_seconds": 1200
       }
     }
-  ]
+  ],
+  "frozen_at": "2026-11-03"
 }

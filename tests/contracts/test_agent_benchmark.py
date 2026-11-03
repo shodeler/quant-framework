@@ -146,6 +146,19 @@ def test_checks_catch_forbidden_confirmations_and_counts():
     assert checks["final status"]["pass"] is True
 
 
+def test_frozen_benchmark_matches_its_recorded_digest():
+    import hashlib
+
+    folder = ROOT / "benchmarks/agent/v1"
+    spec = json.loads((folder / "tasks.json").read_text(encoding="utf-8"))
+    if spec["status"] != "frozen":
+        return
+    recorded = (folder / "FROZEN.sha256").read_text(encoding="utf-8").split()[0]
+    actual = hashlib.sha256((folder / "tasks.json").read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+    assert actual == recorded, "tasks.json v1 is frozen; put changes in a new benchmark version"
+    assert json.loads((folder / "thresholds.json").read_text(encoding="utf-8"))["benchmark"] == spec["benchmark"]
+
+
 def test_benchmark_tasks_are_well_formed():
     spec = json.loads((ROOT / "benchmarks/agent/v1/tasks.json").read_text(encoding="utf-8"))
     ids = [task["id"] for task in spec["tasks"]]
