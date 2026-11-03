@@ -15,7 +15,8 @@ sync  run bench-momentum's saved recipe and wait for it to finish. This is the
       Each run stops after the recipe's 30-minute limit and resumes from its
       watermarks on the next run.
 F2    one succeeded backtest of bench-momentum/main over the benchmark window.
-F3    project bench-quality using quality_profitability. It needs financials to
+F3    project bench-quality using quality_profitability, its recipe limited to
+      the bundled 300-symbol sample in data/manifest.json. It needs financials to
       be ABSENT, so stop rerunning "sync" once bars, suspension and ST state
       cover the window; T08 then makes the Agent sync the financials itself.
       Delete data/runtime/rq/financials and data/runtime/canonical/fundamentals
@@ -58,6 +59,16 @@ def monthly_momentum(context, state, *, top_n: int = 10):
     selected = list(scores.nlargest(top_n).index)
     return SignalResult(selected=selected, scores=scores, state=state)'''
 REPLACEMENTS = {"F3": [{"entrypoint_id": "monthly_momentum", "function_source": QUALITY_SIGNAL}]}
+# F3's recipe syncs financials for the bundled 300-symbol sample only, so the
+# Agent's own sync in T08 fits inside one 30-minute recipe run.
+SAMPLE_MANIFEST = Path(__file__).resolve().parents[1] / "data/manifest.json"
+
+
+def _recipe_parameters(fixture: str) -> dict:
+    parameters = {"start": DATA_RANGE[0], "end": DATA_RANGE[1]}
+    if fixture == "F3":
+        parameters["symbols"] = json.loads(SAMPLE_MANIFEST.read_text(encoding="utf-8"))["symbols"]
+    return parameters
 TERMINAL = {"succeeded", "failed", "cancelled", "interrupted"}
 # Local ids of fixture results, read by scripts/agent_benchmark.py.
 FIXTURE_STATE = Path(__file__).resolve().parents[1] / "build/benchmarks/fixtures.json"
@@ -95,7 +106,7 @@ def create_project(client: httpx.Client, fixture: str, reset: bool) -> None:
         "project_id": project_id, "name": name, "description": f"Agent benchmark fixture {fixture} (issue #22)",
         "factors": [{"template_id": template_id}],
         "function_replacements": REPLACEMENTS.get(fixture, []),
-        "recipe_parameters": {"start": DATA_RANGE[0], "end": DATA_RANGE[1]},
+        "recipe_parameters": _recipe_parameters(fixture),
         "confirm_save": True, "confirm_python_execution": True,
     })
     if response.status_code == 409 and not reset:
