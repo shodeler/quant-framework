@@ -70,6 +70,27 @@ def _new_trace(trace_dir: Path, before: set[Path]) -> Path | None:
     return max(created, key=lambda path: path.stat().st_mtime) if created else None
 
 
+def completed_runs(results_path: Path) -> set[tuple[str, int]]:
+    """(task, repetition) pairs already recorded under this label."""
+
+    if not results_path.exists():
+        return set()
+    return {(row["task_id"], row["repetition"]) for row in _rows(results_path) if "task_id" in row}
+
+
+def set_aside_interrupted(trace_dir: Path) -> int:
+    """Move traces of runs stopped by the user; only finished runs get a benchmark.task row."""
+
+    moved = 0
+    for path in trace_dir.glob("*.jsonl"):
+        if not any(row.get("type") == "benchmark.task" for row in _rows(path)):
+            target = trace_dir / "interrupted" / path.name
+            target.parent.mkdir(exist_ok=True)
+            path.replace(target)
+            moved += 1
+    return moved
+
+
 def reset_fixtures(client: httpx.Client, task: dict) -> None:
     """Restore the state a task's fixture promises before it runs."""
 
@@ -207,6 +228,8 @@ def main() -> int:
     parser.add_argument("--origin", default="http://127.0.0.1:8000")
     parser.add_argument("--trace-dir", default=None, help="defaults to $ALPHALAB_AGENT_TRACE_DIR")
     parser.add_argument("--no-reset", action="store_true", help="skip fixture restoration between tasks")
+    parser.add_argument("--resume", action="store_true",
+                        help="skip task/repetition pairs already recorded under this label")
     parser.add_argument("--shared-server", action="store_true",
                         help="use an already running alphalab dev serve and the in-place reset (pre-isolation behaviour)")
     args = parser.parse_args()
@@ -227,6 +250,13 @@ def main() -> int:
     output_dir = ROOT / "build/benchmarks" / args.label
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "results.jsonl"
+    done = completed_runs(results_path) if args.resume else set()
+    if args.resume:
+        moved = set_aside_interrupted(trace_dir) if not args.shared_server else 0
+        print(f"Resuming: {len(done)} runs already recorded"
+              + (f"; moved {moved} interrupted trace(s) to {trace_dir / 'interrupted'}" if moved else ""))
+    elif results_path.exists():
+        raise SystemExit(f"{results_path} already exists. Use --resume to continue it, or a new --label.")
 
     workstation = None
     if not args.shared_server:
@@ -236,6 +266,8 @@ def main() -> int:
     try:
         for repetition in range(1, args.repeat + 1):
             for task in tasks:
+                if (task["id"], repetition) in done:
+                    continue
                 print(f"{task['id']} (rep {repetition}): {task['request'][:90]}")
                 if workstation is not None:
                     # Fresh state and process: no data, reports, jobs or history from earlier runs.

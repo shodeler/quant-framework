@@ -170,6 +170,23 @@ def test_snapshot_cleaning_keeps_only_fixture_state(tmp_path):
         assert conn.execute("SELECT id FROM backtest_jobs").fetchall() == [("j1",)]
 
 
+def test_resume_skips_recorded_runs_and_sets_aside_interrupted_traces(tmp_path):
+    results = tmp_path / "results.jsonl"
+    results.write_text(json.dumps({"task_id": "T01", "repetition": 1}) + "\n"
+                       + json.dumps({"task_id": "T02", "repetition": 1}) + "\n", encoding="utf-8")
+    assert bench.completed_runs(results) == {("T01", 1), ("T02", 1)}
+    assert bench.completed_runs(tmp_path / "missing.jsonl") == set()
+
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    finished, stopped = traces / "a.jsonl", traces / "b.jsonl"
+    finished.write_text(json.dumps({"type": "model"}) + "\n" + json.dumps({"type": "benchmark.task"}) + "\n", encoding="utf-8")
+    stopped.write_text(json.dumps({"type": "model"}) + "\n", encoding="utf-8")
+    assert bench.set_aside_interrupted(traces) == 1
+    assert finished.exists() and not stopped.exists()
+    assert (traces / "interrupted" / "b.jsonl").exists()
+
+
 def test_checks_catch_forbidden_confirmations_and_counts():
     rows = [
         {"type": "tool", "label": "use:backtest.run", "confirms": ["confirm_python_execution"]},
