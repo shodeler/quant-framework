@@ -45,7 +45,7 @@ Tokens and cost:
 - Because 96.8% of input is cached, output and thinking tokens are the main cost
   driver; the long fixed prompt mainly costs latency.
 - 122 exact repeated tool calls (mostly identical `backtest.wait` polls).
-- 88 tool failures, including 30 rejected `workspace.outputs.prepare` calls.
+- 88 tool failures, including 26 rejected `workspace.outputs.prepare` calls.
 
 ## Per task (medians over 3 runs, off-peak cost)
 
@@ -80,5 +80,5 @@ Manual grading against each task's grader rule is pending.
 1. Waiting: one model call per 30 s poll; no blocking wait for data-sync jobs.
 2. Budget awareness: explicit stop with a summary when a budget runs out (T12).
 3. Missing-data recovery: follow the documented sync-and-retry path (T08).
-4. Output delivery: 30 rejected `workspace.outputs.prepare` calls.
+4. Output delivery: 26 rejected `workspace.outputs.prepare` calls.
 5. Output/thinking tokens and the fixed prompt (cost and latency).
