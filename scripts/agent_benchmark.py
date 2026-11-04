@@ -1,16 +1,15 @@
-"""Run the agent benchmark (issue #22) against a running ``alphalab dev serve``.
+"""Run the agent benchmark (issue #22).
 
-Start the workstation with tracing enabled in the same terminal first:
-
-    $env:ALPHALAB_AGENT_TRACE_DIR = "$PWD\\build\\traces\\pilot"
-    $env:ALPHALAB_BENCHMARK_VERSION = "alphalab-agent-v1"
-    alphalab dev serve
-
-Then, in another terminal:
+By default every task is isolated: the runner restores the snapshot made by
+``scripts/benchmark_isolation.py snapshot`` and starts its own ``alphalab dev
+serve`` with tracing, then stops it after the task. Do not run your own
+workstation at the same time.
 
     python scripts/agent_benchmark.py --tasks T01 --label pilot
-    python scripts/agent_benchmark.py --label pilot              # every task once
     python scripts/agent_benchmark.py --label baseline --repeat 3
+
+Traces go to build/traces/<label> unless --trace-dir is given. --shared-server
+uses an already running workstation instead (the pre-isolation behaviour).
 
 Each run is sent through the workstation API exactly like the Agent rail sends it,
 without being saved into the shared conversation history. Budgets from tasks.json
@@ -37,6 +36,7 @@ import httpx
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import benchmark_fixtures as fixtures  # noqa: E402
+import benchmark_isolation as isolation  # noqa: E402
 
 TASKS = ROOT / "benchmarks/agent/v1/tasks.json"
 FIXTURE_STATE = fixtures.FIXTURE_STATE
@@ -207,11 +207,18 @@ def main() -> int:
     parser.add_argument("--origin", default="http://127.0.0.1:8000")
     parser.add_argument("--trace-dir", default=None, help="defaults to $ALPHALAB_AGENT_TRACE_DIR")
     parser.add_argument("--no-reset", action="store_true", help="skip fixture restoration between tasks")
+    parser.add_argument("--shared-server", action="store_true",
+                        help="use an already running alphalab dev serve and the in-place reset (pre-isolation behaviour)")
     args = parser.parse_args()
 
     trace_dir = Path(args.trace_dir or os.environ.get("ALPHALAB_AGENT_TRACE_DIR") or "")
-    if not str(trace_dir) or not trace_dir.is_dir():
+    if args.shared_server and (not str(trace_dir) or not trace_dir.is_dir()):
         raise SystemExit("Pass --trace-dir (the folder alphalab dev serve was started with) or set ALPHALAB_AGENT_TRACE_DIR.")
+    if not args.shared_server:
+        if not str(trace_dir):
+            trace_dir = ROOT / "build/traces" / args.label
+        trace_dir = trace_dir.resolve()
+        trace_dir.mkdir(parents=True, exist_ok=True)
     spec = json.loads(TASKS.read_text(encoding="utf-8"))
     wanted = {item.strip() for item in args.tasks.split(",")} if args.tasks else None
     tasks = [task for task in spec["tasks"] if wanted is None or task["id"] in wanted]
@@ -221,22 +228,40 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     results_path = output_dir / "results.jsonl"
 
-    with httpx.Client(base_url=args.origin.rstrip("/"), timeout=60.0, trust_env=False) as client:
-        manifest = client.get("/api/conexus/manifest")
-        fixtures._fail(manifest, "Reading the Agent manifest (is alphalab dev serve running with a model configured?)")
-        exposure_id = manifest.json()["defaultExposureId"]
+    workstation = None
+    if not args.shared_server:
+        workstation = isolation.Workstation(
+            {"ALPHALAB_AGENT_TRACE_DIR": str(trace_dir), "ALPHALAB_BENCHMARK_VERSION": spec["benchmark"]},
+            output_dir / "serve.log")
+    try:
         for repetition in range(1, args.repeat + 1):
             for task in tasks:
                 print(f"{task['id']} (rep {repetition}): {task['request'][:90]}")
-                if not args.no_reset:
-                    reset_fixtures(client, task)
-                result = run_task(client, exposure_id, task, repetition, trace_dir, args.label)
+                if workstation is not None:
+                    # Fresh state and process: no data, reports, jobs or history from earlier runs.
+                    isolation.restore_snapshot()
+                    workstation.start()
+                try:
+                    with httpx.Client(base_url=args.origin.rstrip("/"), timeout=60.0, trust_env=False) as client:
+                        manifest = client.get("/api/conexus/manifest")
+                        fixtures._fail(manifest, "Reading the Agent manifest (is a model configured?)")
+                        if workstation is None and not args.no_reset:
+                            reset_fixtures(client, task)
+                        result = run_task(client, manifest.json()["defaultExposureId"], task, repetition,
+                                          trace_dir, args.label)
+                finally:
+                    if workstation is not None:
+                        workstation.stop()
+                result["isolated"] = workstation is not None
                 with results_path.open("a", encoding="utf-8") as output:
                     output.write(json.dumps(result, ensure_ascii=False) + "\n")
                 failed = [name for name, item in result["checks"].items() if not item["pass"]]
                 print(f"  -> {result['outcome']} in {result['elapsed_s']}s, {result['model_calls']} model calls, "
                       f"{result['tokens_in']} in / {result['tokens_out']} out tokens; "
                       f"auto checks {'PASS' if result['auto_pass'] else 'FAIL ' + str(failed)}")
+    finally:
+        if workstation is not None:
+            workstation.stop()
     print(f"Results: {results_path}")
     print(f"Breakdown: node scripts/agent_trace_summary.mjs {trace_dir}")
     return 0

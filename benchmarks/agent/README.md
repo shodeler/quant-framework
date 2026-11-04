@@ -24,14 +24,21 @@ payloads and keys are never written.
 
 ## Run tasks
 
-Create the fixtures once with `scripts/benchmark_fixtures.py`, start
-`alphalab dev serve` with the trace variables above, then in a second terminal:
+Create the fixtures once with `scripts/benchmark_fixtures.py`, then take the
+isolation snapshot with no workstation running:
 
 ```powershell
+python scripts\benchmark_isolation.py snapshot
 python scripts\agent_benchmark.py --tasks T01 --label pilot     # one task
-python scripts\agent_benchmark.py --label pilot                  # all tasks once
 python scripts\agent_benchmark.py --label baseline --repeat 3
 ```
+
+Before every task the runner restores the snapshot (F0 market data, the three
+fixture projects, only the F2 backtest, no sync history) and starts a fresh
+`alphalab dev serve` with tracing, which it stops afterwards. Nothing an earlier
+task synchronized, wrote, queued or reported is visible to the next one. Do not
+run your own workstation at the same time; `--shared-server` restores the older
+in-place behaviour.
 
 The runner restores fixtures before every task, enforces each task's
 model-call and time budget by cancelling the run (recorded as

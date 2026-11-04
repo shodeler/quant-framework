@@ -134,6 +134,42 @@ def test_fixture_ids_are_filled_into_requests(tmp_path, monkeypatch):
     assert context["workspaceContext"]["conversationHistory"]["messages"][0]["content"] == "Earlier: abc123"
 
 
+def test_snapshot_cleaning_keeps_only_fixture_state(tmp_path):
+    import sqlite3
+
+    import benchmark_isolation as isolation
+
+    app, dataio = tmp_path / "alphalab.db", tmp_path / "dataio.db"
+    with sqlite3.connect(dataio) as conn:
+        for table, column in (("datasets", "id"), ("partitions", "dataset_id"), ("quality_runs", "dataset_id")):
+            conn.execute(f"CREATE TABLE {table} ({column} TEXT)")
+            conn.executemany(f"INSERT INTO {table} VALUES (?)", [("rq.bars",), ("rq.financials.income",)])
+        conn.execute("CREATE TABLE sync_jobs (id TEXT)")
+        conn.execute("CREATE TABLE sync_checkpoints (job_id TEXT)")
+        conn.execute("INSERT INTO sync_jobs VALUES ('failed-job')")
+    with sqlite3.connect(app) as conn:
+        conn.execute("CREATE TABLE strategy_projects (id TEXT PRIMARY KEY)")
+        conn.execute("CREATE TABLE backtests (id TEXT PRIMARY KEY)")
+        conn.execute("CREATE TABLE backtest_returns (backtest_id TEXT REFERENCES backtests(id) ON DELETE CASCADE)")
+        conn.execute("CREATE TABLE backtest_jobs (id TEXT, result_id TEXT)")
+        conn.executemany("INSERT INTO strategy_projects VALUES (?)", [("bench-momentum",), ("bench-lowvol",)])
+        conn.executemany("INSERT INTO backtests VALUES (?)", [("f2",), ("later",)])
+        conn.executemany("INSERT INTO backtest_returns VALUES (?)", [("f2",), ("later",)])
+        conn.executemany("INSERT INTO backtest_jobs VALUES (?, ?)", [("j1", "f2"), ("j2", "later"), ("j3", None)])
+
+    isolation.clean_databases(app, dataio, "f2")
+
+    with sqlite3.connect(dataio) as conn:
+        assert conn.execute("SELECT id FROM datasets").fetchall() == [("rq.bars",)]
+        assert conn.execute("SELECT dataset_id FROM partitions").fetchall() == [("rq.bars",)]
+        assert conn.execute("SELECT COUNT(*) FROM sync_jobs").fetchone() == (0,)
+    with sqlite3.connect(app) as conn:
+        assert conn.execute("SELECT id FROM strategy_projects").fetchall() == [("bench-momentum",)]
+        assert conn.execute("SELECT id FROM backtests").fetchall() == [("f2",)]
+        assert conn.execute("SELECT backtest_id FROM backtest_returns").fetchall() == [("f2",)]
+        assert conn.execute("SELECT id FROM backtest_jobs").fetchall() == [("j1",)]
+
+
 def test_checks_catch_forbidden_confirmations_and_counts():
     rows = [
         {"type": "tool", "label": "use:backtest.run", "confirms": ["confirm_python_execution"]},
